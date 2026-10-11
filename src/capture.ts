@@ -8,13 +8,24 @@
  * changes payloads today (see the README).
  */
 
-import { fitImagesToInputLimits, type Message, type Model } from "@earendil-works/pi-ai";
+import type { Message, Model } from "@earendil-works/pi-ai";
+import * as piAi from "@earendil-works/pi-ai";
 import {
 	buildSessionProjection,
 	type ContextWithSystemEvent,
 	convertToLlm,
 	type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
+
+type FitImages = (messages: Message[], limits: Model<any>["inputLimits"]) => { messages: Message[] };
+
+/**
+ * Some Pi builds leave old images out of a request that passes the model's `inputLimits`: the agent loop applies
+ * pi-ai's `fitImagesToInputLimits` after `convertToLlm`. The prediction applies the same function, so its prefix
+ * stays equal to the main request. Stock Pi has no such function, and its agent loop sends every image, so the
+ * messages stay as they are.
+ */
+const fitImages = (piAi as unknown as { fitImagesToInputLimits?: FitImages }).fitImagesToInputLimits;
 
 export interface LastRequest {
 	/** The leaf when the request was built: its last message is the request's last message. */
@@ -65,8 +76,9 @@ export function continuationMessages(
 	if (index < 0) return undefined;
 	const tail = projection.entries.slice(index + 1).flatMap((entry) => entry.messages);
 	if (tail.length === 0) return undefined;
-	// The agent applies the same image limits to each request (agent-loop `streamAssistantResponse`).
-	return fitImagesToInputLimits(convertToLlm([...last.messages, ...tail]), model.inputLimits).messages;
+	const messages = convertToLlm([...last.messages, ...tail]);
+	// The same image limits as the agent loop applies to each request, where the host has them (see `fitImages`).
+	return typeof fitImages === "function" ? fitImages(messages, model.inputLimits).messages : messages;
 }
 
 /** The id of the last `message` entry on the branch: the key of a prediction (plan D6). */

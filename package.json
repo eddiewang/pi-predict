@@ -1,59 +1,67 @@
 {
-	"name": "@eddiewang/pi-predict",
-	"version": "0.1.0",
-	"description": "Predicts the owner's next reply when a Pi run ends, with the session model and its cached prefix.",
-	"keywords": [
-		"pi-package",
-		"pi-extension",
-		"prediction",
-		"ensemble"
-	],
-	"type": "module",
-	"exports": {
-		".": "./src/index.ts"
-	},
-	"license": "MIT",
-	"author": "Eddie Wang",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/eddiewang/pi-config.git",
-		"directory": "packages/pi-predict"
-	},
-	"scripts": {
-		"test": "vitest run",
-		"typecheck": "tsc -p tsconfig.json"
-	},
-	"files": [
-		"src/",
-		"CHANGELOG.md",
-		"LICENSE",
-		"README.md"
-	],
-	"pi": {
-		"extensions": [
-			"./src/index.ts"
-		]
-	},
-	"peerDependencies": {
-		"@earendil-works/pi-ai": "0.87.1",
-		"@earendil-works/pi-coding-agent": "0.87.1",
-		"@earendil-works/pi-tui": "0.87.1"
-	},
-	"peerDependenciesMeta": {
-		"@earendil-works/pi-ai": {
-			"optional": true
-		},
-		"@earendil-works/pi-coding-agent": {
-			"optional": true
-		},
-		"@earendil-works/pi-tui": {
-			"optional": true
-		}
-	},
-	"devDependencies": {
-		"@earendil-works/pi-ai": "0.87.1",
-		"@earendil-works/pi-coding-agent": "0.87.1",
-		"@earendil-works/pi-tui": "0.87.1",
-		"vitest": "4.1.11"
-	}
+  "name": "@eddiewang/pi-predict",
+  "version": "0.1.0",
+  "description": "Predicts the owner's next reply when a Pi run ends, with the session model and its cached prefix.",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "prediction",
+    "ensemble"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "author": "Eddie Wang",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eddiewang/pi-predict.git"
+  },
+  "homepage": "https://github.com/eddiewang/pi-predict#readme",
+  "bugs": {
+    "url": "https://github.com/eddiewang/pi-predict/issues"
+  },
+  "scripts": {
+    "check": "biome check --error-on-warnings . && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:sdk": "node --disable-warning=ExperimentalWarning scripts/test-sdk.ts"
+  },
+  "files": [
+    "src/",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.6",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@earendil-works/pi-tui": "1.1.0",
+    "@types/node": "24.13.6",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
 }

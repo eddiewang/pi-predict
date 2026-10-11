@@ -37,6 +37,14 @@ export interface PiPredictOptions {
 	history?: HistorySource;
 }
 
+/**
+ * Subscribe to an event that only some Pi builds emit. Stock Pi's event map does not name it, so the call goes
+ * through a cast; stock Pi accepts the subscription and never emits the event.
+ */
+function onOptionalEvent(pi: ExtensionAPI, event: string, handler: () => void): void {
+	(pi as unknown as { on(event: string, handler: () => void): void }).on(event, handler);
+}
+
 /** The history build waits this long after a session starts, so it does not compete with the start. */
 export const HISTORY_BUILD_DELAY_MS = 5_000;
 
@@ -108,7 +116,8 @@ export function createPiPredict(options: PiPredictOptions = {}): (pi: ExtensionA
 		// The captured request no longer matches the branch or the model.
 		pi.on("session_tree", () => predictor?.reset());
 		pi.on("session_compact", () => predictor?.reset());
-		pi.on("session_context_window", () => predictor?.reset());
+		// Pi builds with context windows start a new window without a compaction.
+		onOptionalEvent(pi, "session_context_window", () => predictor?.reset());
 		pi.on("model_select", () => predictor?.reset());
 		pi.on("ui_prompt_start", () => predictor?.onPromptOpen(true));
 		pi.on("ui_prompt_end", () => predictor?.onPromptOpen(false));

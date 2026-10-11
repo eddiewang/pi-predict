@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import * as piAi from "@earendil-works/pi-ai";
+import { AgentSession, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 import { WIDGET_KEY } from "../src/display.ts";
 import type { OutcomeLine, PredictionLine } from "../src/log.ts";
@@ -268,5 +269,65 @@ describe("API", () => {
 		]);
 		const { api } = await import("./harness.ts");
 		expect(api().current(h.sessionId)).toEqual(state);
+	});
+});
+
+// Features that only some Pi builds have. `npm run test:sdk` runs these tests against such a build.
+const hostLimitsImages = typeof (piAi as { fitImagesToInputLimits?: unknown }).fitImagesToInputLimits === "function";
+const hostHasContextWindows = typeof (AgentSession.prototype as { newContext?: unknown }).newContext === "function";
+
+// Two valid 1x1 PNG images.
+const IMAGES = [
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+].map((data) => ({ type: "image" as const, data, mimeType: "image/png" }));
+
+/** A run whose request has two images, on a model that accepts one image per request. */
+async function runWithImages() {
+	const h = await start({ model: { input: ["text", "image"], inputLimits: { images: { maxPerRequest: 1 } } } });
+	const exchanges: Exchange[] = [];
+	h.faux.setResponses([provider(exchanges, "Both screenshots show the bug."), provider(exchanges, "fix it")]);
+	await h.session.prompt("compare these", { images: IMAGES });
+	const state = await h.waitForState((s) => s.state === "completed" || s.state === "failed");
+	return {
+		state,
+		prediction: exchanges[1],
+		mainMessages: exchanges[0]?.context.messages ?? [],
+		predictionMessages: exchanges[1]?.context.messages ?? [],
+	};
+}
+
+describe("host differences", () => {
+	it("continues a request with images on a model with input limits", async () => {
+		const { state, prediction, mainMessages, predictionMessages } = await runWithImages();
+
+		expect(state).toMatchObject({ state: "completed", text: "fix it" });
+		expect(prediction?.payloadError).toBeUndefined();
+		expect(predictionMessages.slice(0, mainMessages.length)).toEqual(mainMessages);
+	});
+
+	it.runIf(hostLimitsImages)("leaves out the same images as the agent loop when the host limits them", async () => {
+		const { state, mainMessages, predictionMessages } = await runWithImages();
+		const omitted = (piAi as unknown as { OMITTED_IMAGE_TEXT: string }).OMITTED_IMAGE_TEXT;
+
+		expect(JSON.stringify(mainMessages)).toContain(omitted);
+		expect(state.state).toBe("completed");
+		expect(predictionMessages.slice(0, mainMessages.length)).toEqual(mainMessages);
+	});
+
+	it.runIf(hostHasContextWindows)("drops the shown prediction when a new context window starts", async () => {
+		const h = await start();
+		const exchanges: Exchange[] = [];
+		h.faux.setResponses([provider(exchanges, "Done."), provider(exchanges, "thanks")]);
+		await h.session.prompt("hi");
+		const shown = await h.waitForState((s) => s.state === "completed");
+		expect(h.terminal.render(WIDGET_KEY)).toEqual(["↳ thanks  tab"]);
+
+		await (h.session as unknown as { newContext(): Promise<void> }).newContext();
+		await h.waitForState(
+			(s) => s.state === "cleared" && s.sourceEntryId === shown.sourceEntryId,
+			h.states.indexOf(shown) + 1,
+		);
+		expect(h.terminal.render(WIDGET_KEY)).toEqual([]);
 	});
 });

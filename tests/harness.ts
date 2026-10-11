@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
 	type Api,
 	type AssistantMessage,
+	type FauxModelDefinition,
 	type FauxResponseStep,
 	fauxAssistantMessage,
 	fauxProvider,
@@ -175,6 +176,8 @@ export async function createHarness(
 		predict?: Omit<PiPredictOptions, "agentDir">;
 		/** Model prices per million tokens (default: the owner's claude-opus-5-5 prices). */
 		cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+		/** Other fields of the faux model, such as `input` and `inputLimits`. */
+		model?: Omit<FauxModelDefinition, "id" | "cost">;
 	} = {},
 ) {
 	const root = mkdtempSync(join(tmpdir(), "pi-predict-"));
@@ -187,6 +190,7 @@ export async function createHarness(
 			{
 				id: "test",
 				contextWindow: 500_000,
+				...options.model,
 				cost: options.cost ?? { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
 			},
 		],
