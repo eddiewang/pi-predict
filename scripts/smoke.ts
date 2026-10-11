@@ -1,6 +1,7 @@
 /**
  * Smoke test of the published package: pack it, load the tarball's contents into the `pi` binary of the installed
- * SDK in RPC mode, and check that this package registers `/predict` and that no extension reports an error.
+ * SDK in RPC mode, and check that this package registers `/predict`, that no extension reports an error, and that Pi
+ * stops after SIGTERM (which runs the extensions' shutdown handlers).
  *
  *   npm run smoke
  *
@@ -9,12 +10,14 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const TIMEOUT_MS = 60_000;
+/** How long Pi may take to stop after SIGTERM before the test kills it and fails. */
+const STOP_MS = 10_000;
 const REQUEST_ID = "smoke-commands";
 
 interface RpcRecord {
@@ -41,8 +44,20 @@ function inside(path: string, directory: string): boolean {
 	return rel !== "" && !rel.startsWith("..");
 }
 
-/** Starts `pi --mode rpc` with the package, asks for its commands, and resolves with the response and the errors. */
-function askCommands(pi: string, packageDir: string, work: string) {
+interface Exchange {
+	response: RpcRecord;
+	/** Every `extension_error` record until Pi closed its output, also during shutdown. */
+	errors: RpcRecord[];
+	stderr: string;
+	/** False when Pi did not stop within STOP_MS of SIGTERM and was killed. */
+	stopped: boolean;
+}
+
+/**
+ * Starts `pi --mode rpc` with the package and asks for its commands. After the answer, it stops Pi with SIGTERM and
+ * resolves when Pi has closed its output.
+ */
+function askCommands(pi: string, packageDir: string, work: string): Promise<Exchange> {
 	const home = join(work, "home");
 	const agentDir = join(work, "agent");
 	mkdirSync(home, { recursive: true });
@@ -65,7 +80,10 @@ function askCommands(pi: string, packageDir: string, work: string) {
 	child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
 		stderr += chunk;
 	});
-	return new Promise<{ response: RpcRecord; errors: RpcRecord[]; stderr: string }>((resolvePromise, reject) => {
+	return new Promise<Exchange>((resolvePromise, reject) => {
+		let response: RpcRecord | undefined;
+		let stopped = true;
+		let stopTimer: NodeJS.Timeout | undefined;
 		const timer = setTimeout(() => {
 			child.kill("SIGKILL");
 			reject(new Error(`no response to get_commands in ${TIMEOUT_MS / 1000} s; stderr: ${stderr.trim()}`));
@@ -85,20 +103,28 @@ function askCommands(pi: string, packageDir: string, work: string) {
 					continue;
 				}
 				if (record.type === "extension_error") errors.push(record);
-				if (record.type === "response" && record.id === REQUEST_ID) {
+				if (record.type === "response" && record.id === REQUEST_ID && !response) {
+					response = record;
 					clearTimeout(timer);
 					child.kill("SIGTERM");
-					resolvePromise({ response: record, errors, stderr });
+					stopTimer = setTimeout(() => {
+						stopped = false;
+						child.kill("SIGKILL");
+					}, STOP_MS);
 				}
 			}
 		});
 		child.on("error", (error) => {
 			clearTimeout(timer);
+			clearTimeout(stopTimer);
 			reject(error);
 		});
-		child.on("exit", (code, signal) => {
+		// "close" comes after the last output, so shutdown errors are in `errors` by then.
+		child.on("close", (code, signal) => {
 			clearTimeout(timer);
-			reject(new Error(`pi exited (${signal ?? code}) before it answered; stderr: ${stderr.trim()}`));
+			clearTimeout(stopTimer);
+			if (response) resolvePromise({ response, errors, stderr, stopped });
+			else reject(new Error(`pi exited (${signal ?? code}) before it answered; stderr: ${stderr.trim()}`));
 		});
 		child.stdin.write(`${JSON.stringify({ id: REQUEST_ID, type: "get_commands" })}\n`);
 	});
@@ -113,12 +139,15 @@ async function main(): Promise<number> {
 		const extracted = spawnSync("tar", ["-xzf", tarball, "-C", work], { encoding: "utf8" });
 		if (extracted.status !== 0) throw new Error(`tar failed: ${extracted.stderr.trim()}`);
 		const packageDir = join(work, "package");
-		const version = spawnSync(pi, ["--version"], { encoding: "utf8" }).stdout.trim();
+		// The SDK's manifest, not `pi --version`: Pi reads its agent directory before it prints the version.
+		const sdkManifest = join(root, "node_modules", "@earendil-works", "pi-coding-agent", "package.json");
+		const { version } = JSON.parse(readFileSync(sdkManifest, "utf8")) as { version: string };
 		console.log(`smoke: ${tarball.slice(work.length + 1)} in pi ${version}`);
 
-		const { response, errors, stderr } = await askCommands(pi, packageDir, work);
+		const { response, errors, stderr, stopped } = await askCommands(pi, packageDir, work);
 		const problems: string[] = [];
 		if (!response.success) problems.push(`get_commands failed: ${response.error ?? "no error text"}`);
+		if (!stopped) problems.push(`pi did not stop within ${STOP_MS / 1000} s of SIGTERM`);
 		const predict = response.data?.commands?.find((command) => command.name === "predict");
 		if (!predict) problems.push("/predict is not registered");
 		else if (predict.source !== "extension" || !inside(predict.sourceInfo?.path ?? "", packageDir)) {
@@ -130,7 +159,7 @@ async function main(): Promise<number> {
 			if (stderr.trim()) console.error(`smoke: pi stderr:\n${stderr.trim()}`);
 			return 1;
 		}
-		console.log("smoke: PASS: /predict is registered by the packed package, with no extension errors");
+		console.log("smoke: PASS: the packed package registers /predict, no extension reports an error, and Pi stops");
 		return 0;
 	} finally {
 		rmSync(work, { recursive: true, force: true });

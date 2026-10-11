@@ -83,15 +83,28 @@ commands.
 
 npm can add a trusted publisher only to a package that exists. The first
 `npm stage publish` of a new package creates the public placeholder version
-`0.0.0-stage`.
+`0.0.0-stage`. The workflow cannot do that first stage, because it has no
+trusted publisher yet, so a maintainer does it once:
 
-1. On npmjs.com, open the package settings. Add a trusted publisher:
+1. Create the package from your machine:
+   1. Run `npm login` (2FA).
+   2. In a temporary copy of the release commit, set a throwaway version:
+      `npm version 0.0.0-bootstrap.0 --no-git-tag-version`.
+   3. Run `npm stage publish --tag bootstrap`. A prerelease version needs a
+      `--tag`.
+   4. Reject that stage: find its id with
+      `npm stage list @eddiewang/pi-predict`, then run
+      `npm stage reject <stage-id>`.
+
+   If npm refuses to stage a new package, publish the first version with
+   `npm publish` and 2FA instead. That version has no provenance.
+2. On npmjs.com, open the package settings. Add a trusted publisher:
    GitHub Actions, user `eddiewang`, repository `pi-predict`, workflow
    `release.yml`, no environment. Do not allow `npm publish` or
    `npm dist-tag`; `npm stage publish` is always allowed.
-2. Set **Publishing access** to "Require two-factor authentication and
+3. Set **Publishing access** to "Require two-factor authentication and
    disallow tokens".
-3. A new trusted publisher expires if no publish uses it in 2 days. Push the
+4. A new trusted publisher expires if no publish uses it in 2 days. Push the
    first tag on the same day.
-4. On GitHub, a ruleset lets only maintainers create `v*` tags, and a run of
+5. On GitHub, a ruleset lets only maintainers create `v*` tags, and a run of
    a workflow from an outside contributor needs approval.

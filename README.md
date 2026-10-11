@@ -54,7 +54,7 @@ examples of your earlier replies (see [History](#history)). pi-predict starts
 no process and opens no other connection.
 
 With a cache hit, a prediction costs a cache read of the prompt, a cache write
-of the new tail, and at most 2,048 output tokens. With Claude Opus prices ($5
+of the new tail, and its output, which is short. With Claude Opus prices ($5
 input, $25 output, $0.50 cache read, and $6.25 cache write per million
 tokens), that is about $0.09 for a prompt of 114k tokens. A cache miss writes
 the whole prompt again: about $0.71 for the same prompt.
@@ -64,7 +64,8 @@ These guards limit the cost:
 - **Prefix guard.** pi-predict sends nothing when the request does not
   continue the cached prefix.
 - **Price cap.** pi-predict skips a prediction when its estimated price is
-  above `maxCostPerPrediction` ($0.40).
+  above `maxCostPerPrediction` ($0.40). The estimate counts a cache hit and
+  the full output cap.
 - **Daily budget.** Predictions stop for the day when the predictions of all
   Pi processes cost `dailyBudget` ($10).
 - **Cache pause.** If two predictions in a row read less than
@@ -76,8 +77,9 @@ The request keeps the cache key of the session:
 
 - A model with `compat.supportsMidConvoEffort` gets "low" effort in the
   transcript, after the cached prefix. The request keeps its thinking
-  settings.
-- Other models keep the session's thinking level.
+  settings. The output cap is 2,048 tokens.
+- Other models keep the session's thinking level, with an output cap of 8,192
+  tokens. When thinking is off, the cap is 2,048 tokens.
 - Anthropic models with budget-based thinking get no predictions, because a
   lower output cap changes the cache key.
 
@@ -177,10 +179,17 @@ pi-predict writes these files:
 
 ## Limits
 
-- pi-predict compares with the payload that its own `before_provider_request`
-  handler sees. An extension that changes provider payloads must load before
-  pi-predict. Otherwise the guard checks a payload that the provider did not
-  get, and the predictions fail the guard.
+- The prefix guard compares with the payload that pi-predict's own
+  `before_provider_request` handler sees, and the prediction request does not
+  go through the `before_provider_request` handlers of other extensions. An
+  extension that changes provider payloads has this effect:
+  - If it loads before pi-predict, the guard sees the changed payload. The
+    predictions then fail the guard, and pi-predict sends nothing.
+  - If it loads after pi-predict, the guard sees the payload before the
+    change. A prediction can then pass the guard and still miss the cache.
+    The cache pause stops the predictions after two such misses.
+
+  So load such an extension before pi-predict, or turn pi-predict off.
 - Some Pi builds have features that stock Pi does not have. pi-predict uses
   them when they are present:
   - pi-ai's `fitImagesToInputLimits`: the prediction leaves out the same
