@@ -23,7 +23,8 @@ pi install git:github.com/eddiewang/pi-predict@v0.1.0
 pi -e npm:@eddiewang/pi-predict
 ```
 
-It needs Pi 0.87.1 or later. Its tests pass with Pi 0.87.1 and 1.1.0.
+It needs Pi 0.87.1 or later. CI tests it with Pi 0.87.1 and with the latest
+Pi release, on each change and each week.
 
 ## How a prediction runs
 
@@ -209,11 +210,14 @@ an independent implementation, with no Codex code.
 npm ci
 npm run check   # Biome and tsc
 npm test        # Vitest, against the Pi SDK in package-lock.json
+npm run smoke   # pack the package, load the tarball in Pi, and find /predict
 npm run test:sdk -- <directory with pi-ai.tgz, pi-coding-agent.tgz, pi-tui.tgz>
 ```
 
 `test:sdk` runs the tests against other Pi SDK builds, for example a fork. The
 tests that need a feature of such a build run only there.
+
+[`RELEASING.md`](RELEASING.md) gives the release steps.
 
 ## License
 

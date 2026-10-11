@@ -26,7 +26,8 @@
     "check": "biome check --error-on-warnings . && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "test:sdk": "node --disable-warning=ExperimentalWarning scripts/test-sdk.ts"
+    "test:sdk": "node --disable-warning=ExperimentalWarning scripts/test-sdk.ts",
+    "smoke": "node --disable-warning=ExperimentalWarning scripts/smoke.ts"
   },
   "files": [
     "src/",
@@ -63,5 +64,8 @@
     "@types/node": "24.13.6",
     "typescript": "6.0.3",
     "vitest": "4.1.11"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Each Monday, the compat job also tests the latest Pi release.
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check, test and smoke (Pi from the lockfile)
+    runs-on: tenki-standard-small-2c-4g
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run smoke
+
+  compat:
+    name: Pi ${{ matrix.pi }}
+    runs-on: tenki-standard-small-2c-4g
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest supported release, and the newest one.
+        pi: ["0.87.1", "latest"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - run: npm ci
+      - name: Install the Pi SDK
+        env:
+          PI_VERSION: ${{ matrix.pi }}
+        run: |
+          npm install --no-save --ignore-scripts \
+            "@earendil-works/pi-ai@$PI_VERSION" \
+            "@earendil-works/pi-coding-agent@$PI_VERSION" \
+            "@earendil-works/pi-tui@$PI_VERSION"
+          node -p 'require("./node_modules/@earendil-works/pi-coding-agent/package.json").version'
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run smoke

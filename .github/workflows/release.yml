@@ -1,0 +1,90 @@
+name: Release
+
+# A tag vX.Y.Z stages version X.Y.Z on npm. A maintainer then examines the staged
+# package and approves it with 2FA (RELEASING.md). Nothing is public on npm
+# before that approval.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify the tag
+    runs-on: tenki-standard-small-2c-4g
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # for origin/main
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: The tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "The tag $GITHUB_REF_NAME names a commit that is not on main." >&2
+            exit 1
+          fi
+      - name: The tag, package.json and CHANGELOG.md name the same version
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "The tag is $GITHUB_REF_NAME, but package.json has $version." >&2
+            exit 1
+          fi
+          if ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "CHANGELOG.md has no section for $version." >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run smoke
+
+  publish:
+    name: Stage on npm
+    needs: verify
+    # npm trusted publishing (OIDC) accepts GitHub-hosted runners only, so this
+    # job cannot run on Tenki, which GitHub counts as self-hosted.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # gh release create
+      id-token: write # npm trusted publishing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      # Staged publishing needs npm 11.15.0 or later.
+      - run: npm install --global --ignore-scripts npm@11.16.0
+      - run: npm --version
+      # The package ships its TypeScript source, so the stage needs no install
+      # or build. Trusted publishing adds provenance by default only when it can;
+      # --provenance makes the job fail when it cannot.
+      - run: npm stage publish --provenance
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          awk -v head="## [$version]" '
+            index($0, head) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
