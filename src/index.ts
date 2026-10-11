@@ -152,9 +152,13 @@ export function createPiPredict(options: PiPredictOptions = {}): (pi: ExtensionA
 				}
 				case "stats": {
 					const days = lastDays(7);
-					const today = computeStats(readDays(agentDir(), days.slice(0, 1)), 1);
-					const week = computeStats(readDays(agentDir(), days), 7);
-					return `${formatStats(today)}\n\n${formatStats(week)}`;
+					try {
+						const today = computeStats(readDays(agentDir(), days.slice(0, 1)), 1);
+						const week = computeStats(readDays(agentDir(), days), 7);
+						return `${formatStats(today)}\n\n${formatStats(week)}`;
+					} catch (error) {
+						return `The prediction log cannot be read: ${(error as Error).message}`;
+					}
 				}
 				case "resume":
 					current.resume();

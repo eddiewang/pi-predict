@@ -64,6 +64,17 @@ interface Shown {
 	text: string;
 }
 
+function price(dollars: number): string {
+	return Number.isFinite(dollars) ? `$${dollars.toFixed(2)}` : "an unbounded amount";
+}
+
+function errorText(error: unknown): string {
+	return (error as NodeJS.ErrnoException).code ?? (error instanceof Error ? error.message : String(error));
+}
+
+/** A request that left and then ended with one of these may have no usage report, though the provider charges it. */
+const UNREPORTED: ReadonlySet<string> = new Set(["cancelled", "timeout", "request_failed"]);
+
 function replyText(message: { content: ReadonlyArray<{ type: string; text?: string }> }): string {
 	return message.content
 		.filter((part) => part.type === "text")
@@ -79,6 +90,8 @@ export class SessionPredictor {
 	private current: Shown | undefined;
 	private lowCacheReads = 0;
 	private paused = false;
+	/** Why the log of a prediction's cost could not be written; predictions stop until `/predict resume`. */
+	private logFailure: string | undefined;
 	private disposed = false;
 	private lastSkip: string | undefined;
 	private readonly options: PredictorOptions;
@@ -106,6 +119,7 @@ export class SessionPredictor {
 	private skipReason(ctx: ExtensionContext, force: boolean): string | undefined {
 		if (!this.config.enabled) return "predictions are off";
 		if (this.paused) return "paused: predictions did not read the session's cache (/predict resume)";
+		if (this.logFailure) return `${this.logFailure} (/predict resume)`;
 		if (ctx.mode !== "tui" && ctx.mode !== "rpc") return `no predictions in ${ctx.mode} mode`;
 		if (isSubagentChild(this.sessionId)) return "a subagent's session";
 		if (!ctx.isIdle() || ctx.hasPendingMessages()) return "Pi is busy";
@@ -154,15 +168,26 @@ export class SessionPredictor {
 			}) ?? [];
 		const instruction = instructionMessage(used);
 		const promptTokens = lastPromptTokens(branch);
-		const estimate = estimateCost(model, promptTokens, after.length + instructionText(used).length, plan.maxTokens);
-		if (estimate > this.config.maxCostPerPrediction) {
-			return `estimated $${estimate.toFixed(2)} is above the $${this.config.maxCostPerPrediction.toFixed(2)} cap`;
-		}
+		const tailChars = after.length + instructionText(used).length;
+		const estimate = estimateCost(model, promptTokens, tailChars, plan.maxTokens);
 		const today = localDay();
-		const spent = spentToday(this.options.agentDir, today);
-		if (spent + estimate > this.config.dailyBudget) {
-			return `the daily budget is used ($${spent.toFixed(2)} of $${this.config.dailyBudget.toFixed(2)})`;
-		}
+		const early = this.costRefusal(estimate, today);
+		if (early) return early;
+		// The provider may send another output cap than the one asked for, or none: check again with the payload's.
+		let admitted: number | undefined;
+		const admit = (outputCap: number | undefined): string | undefined => {
+			// Without a cap in the payload, the model's largest output counts.
+			const largest = model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY;
+			const atSend = estimateCost(model, promptTokens, tailChars, outputCap ?? largest);
+			const refusal = this.costRefusal(atSend, today);
+			if (!refusal) {
+				admitted = atSend;
+				return undefined;
+			}
+			return outputCap === undefined
+				? `${refusal}; the request has no output cap, so the model's largest output counts`
+				: `${refusal} at an output cap of ${outputCap} tokens`;
+		};
 
 		this.cancel();
 		const running: Running = { id: randomUUID(), sourceEntryId, controller: new AbortController() };
@@ -176,6 +201,7 @@ export class SessionPredictor {
 			reasoning: plan.reasoning,
 			maxTokens: plan.maxTokens,
 			mainPayload: last.payload,
+			admit,
 			signal: running.controller.signal,
 		});
 		this.finish(ctx, running, result, {
@@ -184,7 +210,25 @@ export class SessionPredictor {
 			promptTokens,
 			examples: used.length,
 			latencyMs: Date.now() - started,
+			admitted,
 		});
+		return undefined;
+	}
+
+	/** Why a request with this estimate must not leave: the price cap or the daily budget (design D9a, D9b). */
+	private costRefusal(estimate: number, today: string): string | undefined {
+		if (estimate > this.config.maxCostPerPrediction) {
+			return `estimated ${price(estimate)} is above the $${this.config.maxCostPerPrediction.toFixed(2)} cap`;
+		}
+		let spent: number;
+		try {
+			spent = spentToday(this.options.agentDir, today);
+		} catch (error) {
+			return `the prediction log cannot be read (${errorText(error)})`;
+		}
+		if (spent + estimate > this.config.dailyBudget) {
+			return `the daily budget is used ($${spent.toFixed(2)} of $${this.config.dailyBudget.toFixed(2)})`;
+		}
 		return undefined;
 	}
 
@@ -238,11 +282,24 @@ export class SessionPredictor {
 		ctx: ExtensionContext,
 		running: Running,
 		result: RequestResult,
-		facts: { model: Model<Api>; today: string; promptTokens: number; examples: number; latencyMs: number },
+		facts: {
+			model: Model<Api>;
+			today: string;
+			promptTokens: number;
+			examples: number;
+			latencyMs: number;
+			/** The estimate when the request left. */
+			admitted: number | undefined;
+		},
 	): void {
 		const message = result.message;
 		const usage = message?.usage;
 		const ratio = usage ? cacheReadRatio(usage) : undefined;
+		const reported = message ? costOf(facts.model, message) : 0;
+		// A stream that stops early can lack the usage report (OpenAI sends it last), so the budget counts at least the
+		// estimate (design D9b).
+		const unreported = result.kind === "failed" && result.sent && UNREPORTED.has(result.reason);
+		const cost = unreported ? Math.max(reported, facts.admitted ?? 0) : reported;
 		const line: PredictionLine = {
 			kind: "prediction",
 			id: running.id,
@@ -267,7 +324,8 @@ export class SessionPredictor {
 						},
 					}
 				: {}),
-			cost: message ? costOf(facts.model, message) : 0,
+			cost,
+			...(cost > reported ? { costEstimated: true } : {}),
 			...(ratio === undefined ? {} : { cacheReadRatio: ratio }),
 			promptTokens: facts.promptTokens,
 			examples: facts.examples,
@@ -276,8 +334,15 @@ export class SessionPredictor {
 		};
 		try {
 			appendLog(this.options.agentDir, line);
-		} catch {
-			// The log is for stats; a full disk must not break the session.
+		} catch (error) {
+			// The daily budget is the sum of this log. Without the line, the spend is unknown: stop, but keep the session.
+			if (!this.logFailure && ctx.hasUI) {
+				ctx.ui.notify(
+					"pi-predict stopped: it cannot write its log, so it cannot count the spend. /predict resume",
+					"warning",
+				);
+			}
+			this.logFailure = `the prediction log cannot be written (${errorText(error)})`;
 		}
 		if (usage) this.checkCacheRead(ctx, usage);
 
@@ -364,13 +429,19 @@ export class SessionPredictor {
 	resume(): void {
 		this.paused = false;
 		this.lowCacheReads = 0;
+		this.logFailure = undefined;
 	}
 
 	status(): string {
-		const state = !this.config.enabled ? "off" : this.paused ? "paused" : "on";
-		const spent = spentToday(this.options.agentDir);
+		const state = !this.config.enabled ? "off" : this.paused || this.logFailure ? "paused" : "on";
+		let today: string;
+		try {
+			today = `$${spentToday(this.options.agentDir).toFixed(2)}`;
+		} catch (error) {
+			today = `unknown (the log cannot be read: ${errorText(error)})`;
+		}
 		const lines = [
-			`pi-predict is ${state}. Today: $${spent.toFixed(2)} of $${this.config.dailyBudget.toFixed(2)}.`,
+			`pi-predict is ${state}. Today: ${today} of $${this.config.dailyBudget.toFixed(2)}.`,
 			`Display: ${this.display?.kind ?? "none (no terminal)"}.`,
 		];
 		if (this.current) lines.push(`Prediction: ${this.current.text}`);

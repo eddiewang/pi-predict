@@ -8,7 +8,7 @@ import { checkPrefix } from "../src/guard.ts";
 import { computeStats, type LogLine } from "../src/log.ts";
 import { classifyOutcome } from "../src/outcome.ts";
 import { instructionText, MAX_PREDICTION_CHARS, parsePrediction } from "../src/prompt.ts";
-import { estimateCost, planRequest } from "../src/request.ts";
+import { estimateCost, payloadOutputCap, planRequest } from "../src/request.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -103,6 +103,46 @@ describe("request plan", () => {
 	it("estimates the cache read, the tail write, and the whole output cap", () => {
 		// 114k tokens read at $0.50, 4k tokens written at $6.25, 2,048 output tokens at $25.
 		expect(estimateCost(model("anthropic-messages"), 114_000, 16_000, 2_048)).toBeCloseTo(0.057 + 0.025 + 0.0512, 4);
+	});
+
+	it("prices the prompt as input when the model has no cache price", () => {
+		const uncached = { cost: { input: 10, output: 30, cacheRead: 0, cacheWrite: 0 } } as unknown as Model<Api>;
+		// 100k prompt tokens and 100 tail tokens at $10, 2,048 output tokens at $30: above the default $0.40 cap.
+		expect(estimateCost(uncached, 100_000, 400, 2_048)).toBeCloseTo(1 + 0.001 + 0.06144, 5);
+	});
+
+	it("uses the price tier of the request's size", () => {
+		const tiered = {
+			cost: {
+				input: 1,
+				output: 5,
+				cacheRead: 0.1,
+				cacheWrite: 1.25,
+				tiers: [{ inputTokensAbove: 200_000, input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }],
+			},
+		} as unknown as Model<Api>;
+		// 400k tokens: the tier above 200k applies to the whole request.
+		expect(estimateCost(tiered, 400_000, 560, 2_048)).toBeCloseTo(0.08 + 0.00035 + 0.02048, 6);
+		// 100k tokens: the base rates.
+		expect(estimateCost(tiered, 100_000, 560, 2_048)).toBeCloseTo(0.01 + 0.000175 + 0.01024, 6);
+	});
+
+	it("makes an unbounded output infinite, unless output is free", () => {
+		expect(estimateCost(model("anthropic-messages"), 10_000, 400, Number.POSITIVE_INFINITY)).toBe(
+			Number.POSITIVE_INFINITY,
+		);
+		const free = { cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } as unknown as Model<Api>;
+		expect(estimateCost(free, 10_000, 400, Number.POSITIVE_INFINITY)).toBe(0);
+	});
+
+	it("reads the output cap that each API's payload sends", () => {
+		expect(payloadOutputCap("anthropic-messages", { max_tokens: 2_048 })).toBe(2_048);
+		expect(payloadOutputCap("openai-completions", { max_completion_tokens: 2_048, max_tokens: 9 })).toBe(2_048);
+		expect(payloadOutputCap("openai-responses", { max_output_tokens: 8_192 })).toBe(8_192);
+		// No cap, or a cap of a field that this API does not read.
+		expect(payloadOutputCap("openai-codex-responses", { input: [] })).toBeUndefined();
+		expect(payloadOutputCap("openai-responses", { max_tokens: 2_048 })).toBeUndefined();
+		expect(payloadOutputCap("anthropic-messages", { max_tokens: "2048" })).toBeUndefined();
 	});
 });
 

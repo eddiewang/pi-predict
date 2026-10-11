@@ -2,7 +2,8 @@
  * The prediction log, `<agentDir>/pi-predict/log/YYYY-MM.jsonl`: one line for each prediction request and one line
  * for each outcome. The daily budget (design D9b) is the sum of today's prediction costs in this file, so every Pi
  * process that writes here shares one budget. Each line is one `appendFileSync` with `O_APPEND`. Files older than
- * three months are deleted at session start.
+ * three months are deleted at session start. A file that exists but cannot be read is an error, not an empty day:
+ * the budget must not start again from zero.
  */
 
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -27,6 +28,8 @@ export interface PredictionLine {
 	text: string | null;
 	usage?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 	cost: number;
+	/** True when `cost` is the estimate: the request left, then ended with no report of its usage. */
+	costEstimated?: boolean;
 	cacheReadRatio?: number;
 	promptTokens: number;
 	examples: number;
@@ -67,8 +70,9 @@ function readLines(path: string): LogLine[] {
 	let text: string;
 	try {
 		text = readFileSync(path, "utf8");
-	} catch {
-		return [];
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+		throw error;
 	}
 	const lines: LogLine[] = [];
 	for (const row of text.split("\n")) {

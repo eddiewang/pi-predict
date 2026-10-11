@@ -1,10 +1,10 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as piAi from "@earendil-works/pi-ai";
 import { AgentSession, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 import { WIDGET_KEY } from "../src/display.ts";
-import type { OutcomeLine, PredictionLine } from "../src/log.ts";
+import { LOG_DIR, localDay, type OutcomeLine, type PredictionLine } from "../src/log.ts";
 import { createHarness, type Exchange, gate, type Harness, provider, TAB, textOf } from "./harness.ts";
 
 const LONG = "x".repeat(40_000);
@@ -201,6 +201,97 @@ describe("skips", () => {
 		expect(exchanges).toHaveLength(2);
 		expect(await h.command("/predict")).toContain("the daily budget is used");
 	});
+});
+
+describe("cost guards", () => {
+	const monthFile = (h: Harness) => join(h.agentDir, LOG_DIR, `${localDay().slice(0, 7)}.jsonl`);
+
+	it("checks the price again with the payload's own output cap, and sends nothing above the cap", async () => {
+		const h = await start({ model: { maxTokens: 64_000 } });
+		const exchanges: Exchange[] = [];
+		const noCap = (payload: object) =>
+			Object.fromEntries(Object.entries(payload).filter(([key]) => key !== "max_tokens"));
+		h.faux.setResponses([provider(exchanges, "Done."), provider(exchanges, "unused", { payload: noCap })]);
+		await h.session.prompt("hi");
+		await h.waitForState((s) => s.state === "failed");
+
+		// Without a cap, the model's 64,000 output tokens at $25 per million are above the $0.40 cap.
+		expect(exchanges[1]?.payloadError).toBeInstanceOf(Error);
+		expect(predictions(h)[0]).toMatchObject({ result: "failed", reason: "refused", cost: 0 });
+		expect(predictions(h)[0]?.detail).toContain("no output cap");
+	});
+
+	it("counts at least the estimate for a request that left and stopped without a usage report", async () => {
+		const h = await start();
+		const exchanges: Exchange[] = [];
+		const late = gate();
+		let entered!: () => void;
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		h.faux.setResponses([
+			provider(exchanges, "First reply."),
+			provider(exchanges, "too late", { until: late.opened, entered }),
+			provider(exchanges, "Second reply."),
+			provider(exchanges, "<none>"),
+		]);
+		await h.session.prompt("one");
+		await started;
+		const first = h.states.find((s) => s.state === "running");
+		await h.session.prompt("two");
+		late.open();
+		await h.waitForState((s) => s.state === "completed" && s.sourceEntryId !== first?.sourceEntryId);
+
+		const [cancelled] = predictions(h);
+		expect(cancelled).toMatchObject({ result: "failed", reason: "cancelled", costEstimated: true });
+		expect(cancelled?.cost).toBeGreaterThan(0);
+	});
+
+	it("makes no request when it cannot read the day's spend", async () => {
+		const h = await start();
+		// A directory where the month's log should be: reading it fails with EISDIR.
+		mkdirSync(monthFile(h), { recursive: true });
+		const exchanges: Exchange[] = [];
+		h.faux.setResponses([provider(exchanges, "Done."), provider(exchanges, "unused")]);
+		await h.session.prompt("hi");
+		await h.settle();
+
+		expect(exchanges).toHaveLength(1);
+		const status = await h.command("/predict");
+		expect(status).toContain("Today: unknown");
+		expect(status).toContain("Last skip: the prediction log cannot be read (EISDIR)");
+	});
+
+	// Root ignores file modes, so the log stays writable for root.
+	it.skipIf(process.getuid?.() === 0)(
+		"stops when it cannot write the cost of a prediction, until /predict resume",
+		async () => {
+			const h = await start();
+			mkdirSync(join(h.agentDir, LOG_DIR), { recursive: true });
+			writeFileSync(monthFile(h), "");
+			chmodSync(monthFile(h), 0o444);
+			const exchanges: Exchange[] = [];
+			h.faux.setResponses([
+				provider(exchanges, "Done."),
+				provider(exchanges, "a guess"),
+				provider(exchanges, "Again."),
+				provider(exchanges, "unused"),
+			]);
+			await h.session.prompt("hi");
+			await h.waitForState((s) => s.state === "completed");
+			expect(h.terminal.notes.map((note) => note.message).join("\n")).toContain("cannot write its log");
+
+			await h.session.prompt("again");
+			await h.settle();
+			expect(exchanges).toHaveLength(3);
+			expect(await h.command("/predict")).toContain(
+				"the prediction log cannot be written (EACCES) (/predict resume)",
+			);
+			chmodSync(monthFile(h), 0o644);
+			await h.command("/predict resume");
+			expect(await h.command("/predict")).toContain("pi-predict is on.");
+		},
+	);
 });
 
 describe("cache guard", () => {

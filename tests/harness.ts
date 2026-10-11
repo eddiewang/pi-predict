@@ -86,13 +86,19 @@ export interface Exchange {
 export function provider(
 	exchanges: Exchange[],
 	answer: string | AssistantMessage,
-	options: { until?: Promise<void>; entered?: () => void } = {},
+	options: {
+		until?: Promise<void>;
+		entered?: () => void;
+		/** Changes the payload, as a provider with other output fields would build it. */
+		payload?: (payload: ReturnType<typeof payloadOf>) => object;
+	} = {},
 ): FauxResponseStep {
 	return async (context, streamOptions, _state, model) => {
 		const exchange: Exchange = { context, options: streamOptions };
 		exchanges.push(exchange);
+		const built = payloadOf(context, streamOptions);
 		try {
-			await streamOptions?.onPayload?.(payloadOf(context, streamOptions), model as Model<Api>);
+			await streamOptions?.onPayload?.(options.payload ? options.payload(built) : built, model as Model<Api>);
 		} catch (error) {
 			exchange.payloadError = error;
 			throw error;

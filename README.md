@@ -64,10 +64,19 @@ These guards limit the cost:
 - **Prefix guard.** pi-predict sends nothing when the request does not
   continue the cached prefix.
 - **Price cap.** pi-predict skips a prediction when its estimated price is
-  above `maxCostPerPrediction` ($0.40). The estimate counts a cache hit and
-  the full output cap.
+  above `maxCostPerPrediction` ($0.40). The estimate counts a cache hit, at
+  the price tier of the request's size, and the full output cap. A model
+  without a cache price pays the input price for the whole prompt. Just
+  before the request leaves, pi-predict checks again with the output cap of
+  the payload itself. A payload without an output cap counts the model's
+  largest output, so a priced model then gets no prediction.
 - **Daily budget.** Predictions stop for the day when the predictions of all
-  Pi processes cost `dailyBudget` ($10).
+  Pi processes cost `dailyBudget` ($10). Each process checks the budget
+  before it sends, so the total can pass the budget by one prediction for
+  each Pi process. A request that stops before the provider reports its
+  usage (for example, because you sent a message first) counts its
+  estimate. If pi-predict cannot read its log, it sends nothing; if it
+  cannot write the log, it stops until `/predict resume`.
 - **Cache pause.** If two predictions in a row read less than
   `minCacheReadRatio` (80%) of their prompt from the cache, the session
   pauses until `/predict resume`. Prompts smaller than 8,192 tokens are not
