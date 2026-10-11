@@ -1,6 +1,6 @@
 /**
  * The prediction log, `<agentDir>/pi-predict/log/YYYY-MM.jsonl`: one line for each prediction request and one line
- * for each outcome. The daily budget (plan D9b) is the sum of today's prediction costs in this file, so every Pi
+ * for each outcome. The daily budget (design D9b) is the sum of today's prediction costs in this file, so every Pi
  * process that writes here shares one budget. Each line is one `appendFileSync` with `O_APPEND`. Files older than
  * three months are deleted at session start.
  */

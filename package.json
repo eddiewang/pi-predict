@@ -1,12 +1,12 @@
 {
   "name": "@eddiewang/pi-predict",
   "version": "0.1.0",
-  "description": "Predicts the owner's next reply when a Pi run ends, with the session model and its cached prefix.",
+  "description": "Predicts your next reply when a Pi run ends, with the session model and its cached prefix.",
   "keywords": [
     "pi-package",
     "pi-extension",
     "prediction",
-    "ensemble"
+    "autocomplete"
   ],
   "type": "module",
   "exports": {

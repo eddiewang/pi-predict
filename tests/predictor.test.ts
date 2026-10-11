@@ -75,7 +75,7 @@ describe("prediction after a run", () => {
 		expect(h.terminal.render(WIDGET_KEY)).toEqual([]);
 	});
 
-	it("drops a prediction that arrives after the owner sent a message", async () => {
+	it("drops a prediction that arrives after the user sent a message", async () => {
 		const h = await start();
 		const exchanges: Exchange[] = [];
 		const late = gate();
@@ -127,7 +127,7 @@ describe("prediction after a run", () => {
 		expect(outcomes(h)).toMatchObject([{ outcome: "accepted", similarity: 1, shown: true }]);
 	});
 
-	it("records 'missed' when the owner sends something else", async () => {
+	it("records 'missed' when the user sends something else", async () => {
 		const h = await start();
 		const exchanges: Exchange[] = [];
 		h.faux.setResponses([
@@ -171,7 +171,7 @@ describe("skips", () => {
 		}
 	});
 
-	it("makes no request while the owner has a draft", async () => {
+	it("makes no request while the user has a draft", async () => {
 		const h = await start();
 		const exchanges: Exchange[] = [];
 		h.faux.setResponses([provider(exchanges, "Done."), provider(exchanges, "unused")]);

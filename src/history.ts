@@ -1,5 +1,5 @@
 /**
- * The history index (plan D7, D8): pairs of (the end of the agent's message, the owner's reply) from earlier
+ * The history index (design D7, D8): pairs of (the end of the agent's message, the user's reply) from earlier
  * sessions, in `<agentDir>/pi-predict/history-v2.json`.
  *
  * Sources are the top-level session files `<agentDir>/sessions/<dir>/<file>.jsonl`: pi-subagents keeps children in
@@ -27,7 +27,7 @@ const MAX_PAIRS = 20_000;
 const MAX_AFTER_CHARS = 400;
 const MAX_REPLY_CHARS = 400;
 const MAX_SOURCE_REPLY_CHARS = 2_000;
-/** "Short" replies may come from any project (owner decision, 2026-10-10). */
+/** With the "project+short" scope, replies of this length or less may come from any project. */
 export const SHORT_REPLY_CHARS = 60;
 /** A history-only reply after an error or an abort needs at least this many earlier cases. */
 export const MIN_REPLY_COUNT = 3;

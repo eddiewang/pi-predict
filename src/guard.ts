@@ -1,6 +1,7 @@
 /**
- * The prefix guard (plan D4). A prediction must reuse the provider's cache of the session's last request, because
- * a cache miss costs the whole prompt again ($0.70-2.30 on the owner's sessions). So before the prediction request
+ * The prefix guard (design D4). A prediction must reuse the provider's cache of the session's last request, because
+ * a cache miss writes the whole prompt again: about $0.70 for 114k tokens and $2.30 for 366k tokens at $6.25 per
+ * million cache-write tokens. So before the prediction request
  * leaves (in `onPayload`), its payload is compared with the payload of the session's last request:
  *
  * - every top-level field is equal, except the message list and the fields that only bound the output;

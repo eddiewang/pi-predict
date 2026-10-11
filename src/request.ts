@@ -1,5 +1,5 @@
 /**
- * One prediction request (plan D1-D4): the session model, the session id, the copy of the last request, then the
+ * One prediction request (design D1-D4): the session model, the session id, the copy of the last request, then the
  * instruction. The options keep the cached prefix:
  *
  * - Effort (D2). A change to the request's thinking or effort settings invalidates Anthropic's message cache. A
@@ -27,7 +27,7 @@ import { parsePrediction } from "./prompt.ts";
 export const LOW_EFFORT_MAX_TOKENS = 2_048;
 /** Output cap when the prediction must keep the session's thinking level. */
 export const SESSION_EFFORT_MAX_TOKENS = 8_192;
-/** Pi waits this long for a prediction; the owner reads the reply meanwhile. */
+/** Pi waits this long for a prediction; the user reads the reply meanwhile. */
 export const REQUEST_TIMEOUT_MS = 45_000;
 
 type SessionThinkingLevel = ReturnType<ExtensionAPI["getThinkingLevel"]>;
@@ -57,7 +57,7 @@ export function planRequest(model: Model<Api>, thinkingLevel: SessionThinkingLev
 }
 
 /**
- * The highest expected price in dollars (plan D9a): the last prompt read from the cache, the new tail written to
+ * The highest expected price in dollars (design D9a): the last prompt read from the cache, the new tail written to
  * it (or read as input when the model has no write price), and the whole output cap.
  */
 export function estimateCost(model: Model<Api>, promptTokens: number, tailChars: number, maxTokens: number): number {
@@ -97,7 +97,7 @@ export interface PredictionRequest {
 	messages: Message[];
 	reasoning: ThinkingLevel | undefined;
 	maxTokens: number;
-	/** The payload of the session's last request (plan D4). */
+	/** The payload of the session's last request (design D4). */
 	mainPayload: unknown;
 	signal: AbortSignal;
 }

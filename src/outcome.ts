@@ -1,5 +1,5 @@
 /**
- * How the owner's next message relates to the prediction (plan step 7). Texts are compared after trimming,
+ * How the user's next message relates to the prediction (design, lifecycle step 7). Texts are compared after trimming,
  * collapsing whitespace, and lower-casing; similarity is one minus the edit distance over the longer length.
  */
 
@@ -32,7 +32,7 @@ export function similarity(a: string, b: string): number {
 }
 
 /**
- * - accepted: the owner took the prediction with the key and sent it unchanged.
+ * - accepted: the user took the prediction with the key and sent it unchanged.
  * - edited: took it with the key, changed it, and it stayed similar.
  * - typed: wrote the same text without the key.
  * - missed: anything else.

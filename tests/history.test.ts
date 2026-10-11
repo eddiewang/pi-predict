@@ -272,12 +272,25 @@ describe("history in predictions", () => {
 		return index;
 	}
 
-	it("puts examples of earlier replies in the instruction", async () => {
+	it("uses replies from the same project only, by default", async () => {
 		const history = await indexWith([
 			["assistant", "Tests pass. Commit?"],
 			["user", "ship it"],
 		]);
 		harness = await createHarness({ predict: { history } });
+		const exchanges: Exchange[] = [];
+		harness.faux.setResponses([provider(exchanges, "Tests pass. Commit?"), provider(exchanges, "ship it")]);
+		await harness.session.prompt("fix it");
+		await harness.waitForState((state) => state.state === "completed");
+		expect(textOf(exchanges[1]?.context.messages.at(-1))).not.toContain("they wrote");
+	});
+
+	it("puts short replies from other projects in the instruction with project+short", async () => {
+		const history = await indexWith([
+			["assistant", "Tests pass. Commit?"],
+			["user", "ship it"],
+		]);
+		harness = await createHarness({ predict: { history }, config: { history: "project+short" } });
 		const exchanges: Exchange[] = [];
 		harness.faux.setResponses([provider(exchanges, "Tests pass. Commit?"), provider(exchanges, "ship it")]);
 		await harness.session.prompt("fix it");
@@ -296,7 +309,7 @@ describe("history in predictions", () => {
 			["assistant", "", "error"],
 			["user", "continue"],
 		]);
-		harness = await createHarness({ predict: { history } });
+		harness = await createHarness({ predict: { history }, config: { history: "project+short" } });
 		const exchanges: Exchange[] = [];
 		harness.faux.setResponses([
 			provider(exchanges, fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded" })),

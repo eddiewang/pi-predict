@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -26,6 +26,7 @@ import {
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { expect } from "vitest";
 import { PREDICT_API_KEY, type PredictApi, type PredictionState } from "../src/api.ts";
+import { CONFIG_FILE, type PredictConfig } from "../src/config.ts";
 import { createPiPredict, type PiPredictOptions } from "../src/index.ts";
 import type { LogLine } from "../src/log.ts";
 import { readDays } from "../src/log.ts";
@@ -174,14 +175,20 @@ export async function createHarness(
 		/** Extensions loaded before pi-predict (their payload changes come first). */
 		before?: ExtensionFactory[];
 		predict?: Omit<PiPredictOptions, "agentDir">;
-		/** Model prices per million tokens (default: the owner's claude-opus-5-5 prices). */
+		/** Model prices per million tokens (default: Claude Opus prices, $5 input, $25 output, $0.50 cache read, $6.25 cache write). */
 		cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 		/** Other fields of the faux model, such as `input` and `inputLimits`. */
 		model?: Omit<FauxModelDefinition, "id" | "cost">;
+		/** The content of `pi-predict.json` when the session starts. */
+		config?: Partial<PredictConfig>;
 	} = {},
 ) {
 	const root = mkdtempSync(join(tmpdir(), "pi-predict-"));
 	const agentDir = join(root, "agent");
+	if (options.config) {
+		mkdirSync(agentDir, { recursive: true });
+		writeFileSync(join(agentDir, CONFIG_FILE), JSON.stringify(options.config));
+	}
 	const faux = fauxProvider({
 		provider: `predict-${Math.random().toString(36).slice(2)}`,
 		api: "anthropic-messages",

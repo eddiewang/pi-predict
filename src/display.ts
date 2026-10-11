@@ -1,7 +1,7 @@
 /**
- * Where a prediction shows in the terminal (plan D10). The line display is a widget above the editor: it shows the
- * prediction while the draft is empty, and Tab puts the prediction in the editor. It never replaces the editor, so
- * pi-droid-theme keeps its frame. Nothing is sent; the owner presses Enter.
+ * Where a prediction shows in the terminal (design D10). The line display is a widget above the editor: it shows the
+ * prediction while the draft is empty, and Tab puts the prediction in the editor. It never replaces the editor, so a
+ * custom editor (a theme's frame, for example) stays. Nothing is sent; the user presses Enter.
  */
 
 import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
@@ -13,9 +13,9 @@ export interface PredictionDisplay {
 	readonly kind: "line" | "ghost";
 	show(text: string): void;
 	clear(): void;
-	/** Whether the owner could see the prediction that `show` set last. */
+	/** Whether the user could see the prediction that `show` set last. */
 	readonly shown: boolean;
-	/** Whether the owner took that prediction with the key. */
+	/** Whether the user took that prediction with the key. */
 	readonly acceptedByKey: boolean;
 	setPromptOpen(open: boolean): void;
 	dispose(): void;
@@ -53,7 +53,7 @@ export class LineDisplay implements PredictionDisplay {
 			if (!matchesKey(data, "tab") || !this.visible()) return undefined;
 			const text = this.text as string;
 			this.ui.setEditorText(text);
-			// Tab works only while the line can show, so the owner had it in front of them.
+			// Tab works only while the line can show, so the user had it in front of them.
 			this.wasShown = true;
 			this.tookKey = true;
 			this.tui?.requestRender();

@@ -1,6 +1,6 @@
 /**
- * The prediction API in the Pi process, `globalThis[Symbol.for("pi-predict:api.v1")]`, for readers such as the
- * Ensemble extension. It follows Codex's `thread/prediction/updated`: each state names the session and the message
+ * The prediction API in the Pi process, `globalThis[Symbol.for("pi-predict:api.v1")]`, for readers such as
+ * the Pi extension of a remote client. It follows Codex's `thread/prediction/updated`: each state names the session and the message
  * entry that the prediction continues (`sourceEntryId`, Codex's `sourceTurnId`). Each change also goes to
  * `pi.events` as `predict:updated.v1`.
  *

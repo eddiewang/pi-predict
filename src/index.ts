@@ -1,13 +1,13 @@
 /**
- * pi-predict: when a run of the agent settles, predict the owner's next message with the session model and the
+ * pi-predict: when a run of the agent settles, predict the user's next message with the session model and the
  * session's cached prefix, and offer it as a suggestion that one key accepts. It never sends a message.
  *
- * Design: `docs/plans/2026-10-10-pi-predict.md` in pi-config. It follows Codex's composer predictions
+ * Design: `docs/design.md`. It follows Codex's composer predictions
  * (`thread/prediction/*`, `experimentalPredictionMode` forks): an ephemeral request that continues the session's
  * own prompt, keyed by the message that it continues.
  *
  * Surfaces: the line above the editor (Tab), the API `Symbol.for("pi-predict:api.v1")` with the event
- * `predict:updated.v1` for Ensemble, and the `/predict` command.
+ * `predict:updated.v1` for other extensions, and the `/predict` command.
  */
 
 import { type ExtensionAPI, type ExtensionCommandContext, getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -33,7 +33,7 @@ const SUBCOMMANDS = ["on", "off", "now", "stats", "resume"] as const;
 export interface PiPredictOptions {
 	/** Directory of `pi-predict.json` and `pi-predict/`. Defaults to Pi's agent directory. */
 	agentDir?: string;
-	/** The owner's earlier replies. Defaults to the history index in the agent directory. */
+	/** The user's earlier replies. Defaults to the history index in the agent directory. */
 	history?: HistorySource;
 }
 

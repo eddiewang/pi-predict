@@ -1,7 +1,7 @@
 /**
  * The instruction that follows the session's context in a prediction request, and the parser of the reply. The
  * instruction is a user message after the cached prefix, so it never changes what the provider cached. Examples of
- * the owner's earlier replies come from the history index (plan D8).
+ * the user's earlier replies come from the history index (design D8).
  */
 
 import type { UserMessage } from "@earendil-works/pi-ai";

@@ -1,11 +1,11 @@
 /**
- * The session's last request, as it went to the provider (plan D1, D4). `context_with_system` gives its messages
+ * The session's last request, as it went to the provider (design D1, D4). `context_with_system` gives its messages
  * after every `context` handler; the next `before_provider_request` gives its payload. Only an agent request fires
  * `context_with_system`, so the cache warmer's replays and pi-predict's own requests are never captured.
  *
  * The payload is the one that pi-predict's handler sees. An extension that changes payloads after pi-predict in
- * the load order makes the guard compare with a payload that the provider did not get; no package in the overlay
- * changes payloads today (see the README).
+ * the load order makes the guard compare with a payload that the provider did not get; see the README,
+ * "Limits".
  */
 
 import type { Message, Model } from "@earendil-works/pi-ai";
@@ -81,7 +81,7 @@ export function continuationMessages(
 	return typeof fitImages === "function" ? fitImages(messages, model.inputLimits).messages : messages;
 }
 
-/** The id of the last `message` entry on the branch: the key of a prediction (plan D6). */
+/** The id of the last `message` entry on the branch: the key of a prediction (design D6). */
 export function lastMessageEntryId(branch: readonly SessionEntry[]): string | undefined {
 	for (let index = branch.length - 1; index >= 0; index--) {
 		const entry = branch[index];

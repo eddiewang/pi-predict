@@ -1,8 +1,8 @@
 /**
- * One live session's predictions (plan "Prediction lifecycle"). When a run settles, the predictor checks the skip
+ * One live session's predictions (design, "Prediction lifecycle"). When a run settles, the predictor checks the skip
  * rules (D5), sends one guarded request (D1-D4), and publishes the result while the branch still ends at the same
  * message (D6). A new message, a tree move, a compaction, a new context window, a model change, and the session's
- * end cancel it. The next message the owner sends gives the outcome.
+ * end cancel it. The next message the user sends gives the outcome.
  */
 
 import { randomUUID } from "node:crypto";
@@ -24,7 +24,7 @@ import { classifyOutcome } from "./outcome.ts";
 import { instructionMessage, instructionText } from "./prompt.ts";
 import { cacheReadRatio, costOf, estimateCost, planRequest, type RequestResult, requestPrediction } from "./request.ts";
 
-/** Two predictions in a row below the configured cache-read share pause the session (plan D9c). */
+/** Two predictions in a row below the configured cache-read share pause the session (design D9c). */
 export const LOW_CACHE_READS_TO_PAUSE = 2;
 /** Smaller prompts are not checked: providers do not cache them, and they cost little. */
 export const MIN_CHECKED_PROMPT_TOKENS = 8_192;
@@ -48,7 +48,7 @@ export interface PredictorOptions {
 	ctx: ExtensionContext;
 	agentDir: string;
 	config: PredictConfig;
-	/** The owner's earlier replies (plan D7, D8). */
+	/** The user's earlier replies (design D7, D8). */
 	history?: HistorySource;
 }
 
@@ -189,7 +189,7 @@ export class SessionPredictor {
 	}
 
 	/**
-	 * After a run that ended in an error or an abort, the usual reply comes from history, with no model call (plan
+	 * After a run that ended in an error or an abort, the usual reply comes from history, with no model call (design
 	 * D7): a request after a provider error is likely to fail too, and most such replies are the same words.
 	 */
 	private predictFromHistory(
@@ -318,7 +318,7 @@ export class SessionPredictor {
 		}
 	}
 
-	/** The owner sent a message: record the outcome of the shown prediction, then drop it. */
+	/** The user sent a message: record the outcome of the shown prediction, then drop it. */
 	onInput(text: string): void {
 		const current = this.current;
 		if (current) {

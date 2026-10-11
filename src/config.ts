@@ -14,9 +14,13 @@ export type HistoryScope = (typeof HISTORY_SCOPES)[number];
 
 export interface PredictConfig {
 	enabled: boolean;
-	/** "auto": ghost text when the fork's editor suggestion API is present, else the line above the editor. */
+	/** "auto": ghost text when the host has an editor suggestion API, else the line above the editor. */
 	display: Display;
-	/** Which past replies may go into the request as examples. */
+	/**
+	 * Which past replies may go into the request as examples. "project" (the default) uses replies from the same
+	 * working directory only; "project+short" adds short replies from all projects, which then go to the provider of
+	 * the current session.
+	 */
 	history: HistoryScope;
 	/** At most this many examples (0-12). */
 	examples: number;
@@ -31,7 +35,7 @@ export interface PredictConfig {
 export const DEFAULT_CONFIG: Readonly<PredictConfig> = Object.freeze({
 	enabled: true,
 	display: "auto",
-	history: "project+short",
+	history: "project",
 	examples: 6,
 	maxCostPerPrediction: 0.4,
 	dailyBudget: 10,
