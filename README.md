@@ -1,17 +1,18 @@
 # pi-predict
 
-A [Pi](https://pi.dev) extension. When a run of the agent settles, pi-predict
-predicts the next message that you will send. It shows the prediction above
-the editor, and Tab puts the prediction in the editor. pi-predict never sends
-a message; you press Enter.
+Your next message, one Tab away.
 
-```text
-↳ commit and push  tab
-```
+![Pi after a run. Above the editor, the line "↳ commit and push  tab" shows the predicted reply. Tab puts "commit and push" in the editor.](docs/demo.svg)
 
-Status: experimental (0.x). Each prediction is one more model request, so read
-[What it sends and what it costs](#what-it-sends-and-what-it-costs) before
-you install it.
+When the agent finishes, this [Pi](https://pi.dev) extension asks the
+session's own model for the message that you will most likely send next. The
+prediction shows above the editor. Tab puts it in the editor, and Enter sends it. When the model is not
+sure, nothing shows. pi-predict never sends a message itself.
+
+The request continues the session's cached prompt, so the provider reads
+almost all of it from the cache. A prediction on a 114k-token Claude Opus
+prompt costs about $0.09. Your earlier replies in the same project show the
+model how you write.
 
 ## Install
 
@@ -23,17 +24,59 @@ pi install git:github.com/eddiewang/pi-predict@v0.1.0
 pi -e npm:@eddiewang/pi-predict
 ```
 
-It needs Pi 0.87.1 or later. CI tests it with Pi 0.87.1 and with the latest
-Pi release, on each change and each week.
+pi-predict needs Pi 0.87.1 or later. CI tests it with Pi 0.87.1 and with the
+latest Pi release, on each change and each week.
 
-## How a prediction runs
+pi-predict is experimental (0.x). Each prediction is one more model request,
+so read the next two sections before you install it.
+
+## Cost
+
+Each prediction is one more request to the session's model. With a cache hit,
+it pays a cache read of the prompt, a cache write of the new tail, and its
+output, which is short. A cache miss writes the whole prompt again. At Claude
+Opus prices ($5 input, $25 output, $0.50 cache read, and $6.25 cache write per
+million tokens), a prompt of 114k tokens costs about $0.09 with a hit and
+about $0.71 with a miss.
+
+In the author's first 10 predictions (prompts of 44k to 413k tokens), 94.6% to
+99.3% of each prompt came from the cache. Each prediction cost $0.04 to $0.22,
+and the median latency was 2.2 s.
+
+Four guards limit the cost. The "Guards" reference below gives the details.
+
+| Guard | Default | Effect |
+|---|---|---|
+| Prefix guard | always on | Sends nothing when the request does not continue the cached prompt. |
+| `maxCostPerPrediction` | $0.40 | Skips a prediction whose estimated price is higher. |
+| `dailyBudget` | $10 | Stops for the day when the day's predictions, from all Pi processes, cost this much. |
+| `minCacheReadRatio` | 80% | Pauses the session when two predictions in a row read less of their prompt from the cache. |
+
+## What it sends
+
+The request goes to the session's own provider, with the session id. It holds
+the same context as your last request, the agent's final reply, and one
+instruction. The instruction can hold examples of your earlier replies to
+similar messages: by default, up to 6 from sessions in the same working
+directory. pi-predict starts no process and opens no other connection.
+
+## Commands
+
+`/predict` shows the status. The subcommands are `on`, `off`, `now` (predict
+even when the editor has a draft), `stats` (today and the last 7 days), and
+`resume` (after a cache pause).
+
+## Reference
+
+<details>
+<summary><strong>How a prediction runs</strong></summary>
 
 1. pi-predict keeps a copy of the session's last request as Pi sent it to the
    provider: the messages from `context_with_system` and the payload from
    `before_provider_request`.
 2. When the run settles (`agent_settled`), pi-predict checks the skip rules
-   (see [Skips](#skips)). Then it sends one request to the session's model:
-   the copied messages, the run's final reply, and one instruction message.
+   (see "Skips" below). Then it sends one request to the session's model: the
+   copied messages, the run's final reply, and one instruction message.
 3. Before the request leaves, the **prefix guard** compares its payload with
    the copied payload. All request settings must be equal, and the copied
    messages must be a prefix of the new messages. If they are not, pi-predict
@@ -45,21 +88,10 @@ Pi release, on each change and each week.
    change), `edited` (Tab, then changed), `typed` (the same text, typed), or
    `missed`. `/predict stats` shows the counts.
 
-## What it sends and what it costs
+</details>
 
-Each settled run can cause one extra request to the session's own provider,
-with the session id. The request holds the same context as your last request,
-the final reply of the agent, and an instruction. The instruction can hold
-examples of your earlier replies (see [History](#history)). pi-predict starts
-no process and opens no other connection.
-
-With a cache hit, a prediction costs a cache read of the prompt, a cache write
-of the new tail, and its output, which is short. With Claude Opus prices ($5
-input, $25 output, $0.50 cache read, and $6.25 cache write per million
-tokens), that is about $0.09 for a prompt of 114k tokens. A cache miss writes
-the whole prompt again: about $0.71 for the same prompt.
-
-These guards limit the cost:
+<details>
+<summary><strong>Guards</strong></summary>
 
 - **Prefix guard.** pi-predict sends nothing when the request does not
   continue the cached prefix.
@@ -96,7 +128,10 @@ The prefix guard knows the payloads of these APIs: `anthropic-messages`,
 `openai-responses`, `openai-codex-responses`, `azure-openai-responses`, and
 `openai-completions`. Models of other APIs get no predictions.
 
-## History
+</details>
+
+<details>
+<summary><strong>History</strong></summary>
 
 The instruction can hold up to `examples` of your earlier replies to similar
 messages of the agent. pi-predict ranks them with BM25 on the end of the
@@ -127,7 +162,10 @@ once. Later builds read only the lines that each file gained. One builder runs
 at a time, by a lock file. On 4.7 GB of session files, the first build took
 about 11 s and peaked at about 440 MB RSS. A later refresh took 0.15 s.
 
-## Skips
+</details>
+
+<details>
+<summary><strong>Skips</strong></summary>
 
 pi-predict makes no request in these cases:
 
@@ -142,7 +180,10 @@ pi-predict makes no request in these cases:
 - the estimated price is above `maxCostPerPrediction`
 - the predictions of the day (from all Pi processes) used up `dailyBudget`
 
-## Configuration
+</details>
+
+<details>
+<summary><strong>Configuration</strong></summary>
 
 `<agentDir>/pi-predict.json`. Every key is optional:
 
@@ -156,13 +197,10 @@ pi-predict makes no request in these cases:
 | `dailyBudget` | `10` | Dollars per local day. |
 | `minCacheReadRatio` | `0.8` | The minimum share of the prompt read from the cache. |
 
-## Command
+</details>
 
-`/predict` shows the status. The subcommands are `on`, `off`, `now` (predict
-even when the editor has a draft), `stats` (today and the last 7 days), and
-`resume` (after a cache pause).
-
-## API
+<details>
+<summary><strong>API</strong></summary>
 
 Other extensions in the same Pi process can read the predictions:
 
@@ -176,7 +214,10 @@ Each state is `{ sessionId, sourceEntryId, state, text, at }`. `state` is
 entry that the prediction continues. Pi also emits each change on `pi.events`
 as `predict:updated.v1`.
 
-## Files
+</details>
+
+<details>
+<summary><strong>Files</strong></summary>
 
 pi-predict writes these files:
 
@@ -186,7 +227,10 @@ pi-predict writes these files:
   text, usage, cost, and cache-read share) and one line for each outcome. Logs
   older than three months are deleted.
 
-## Limits
+</details>
+
+<details>
+<summary><strong>Limits</strong></summary>
 
 - The prefix guard compares with the payload that pi-predict's own
   `before_provider_request` handler sees, and the prediction request does not
@@ -207,6 +251,8 @@ pi-predict writes these files:
     prediction.
   - an editor suggestion API (`ctx.ui.editorSuggestionVersion === 1`): ghost
     text in the editor. This is not built yet.
+
+</details>
 
 ## Uninstall
 

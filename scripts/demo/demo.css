@@ -1,0 +1,15 @@
+/* An 8 s loop. A: 0-1.5 s, the reply. B: 1.5-4.6 s, the prediction, which fades in. The "tab" key cap shows from
+   4.05 s. C: 4.6-7.6 s, the editor after Tab, then a cross-fade back to A. Without animation, B shows. */
+.f,.k{opacity:0}
+.f-B{opacity:1}
+@keyframes a{0%,18.74%{opacity:1}18.75%,95%{opacity:0}100%{opacity:1}}
+@keyframes b{0%,18.74%{opacity:0}18.75%,57.49%{opacity:1}57.5%,100%{opacity:0}}
+@keyframes p{0%,18.75%{opacity:0}22%,100%{opacity:1}}
+@keyframes c{0%,57.49%{opacity:0}57.5%,95%{opacity:1}100%{opacity:0}}
+@keyframes k{0%,50.6%{opacity:0}51.8%,57.49%{opacity:1}57.5%,100%{opacity:0}}
+.f-A{animation:a 8s infinite}
+.f-B{animation:b 8s infinite}
+.f-B .pred{animation:p 8s infinite}
+.f-C{animation:c 8s infinite}
+.k{animation:k 8s infinite}
+@media (prefers-reduced-motion:reduce){.f,.k,.f-B .pred{animation:none}.f-A,.f-C,.k{opacity:0}.f-B{opacity:1}}
