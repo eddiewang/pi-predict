@@ -7,6 +7,18 @@ version can contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- A preview image for the [Pi package gallery](https://pi.dev/packages):
+  `pi.image` in `package.json`.
+
+### Fixed
+
+- The README image and the links to `docs/design.md` and `RELEASING.md` work
+  on the Pi package gallery. The gallery shows the README from the npm
+  package, which does not contain these files, so the README now uses
+  absolute URLs.
+
 ## [0.1.0] - 2026-10-12
 
 The first public version.

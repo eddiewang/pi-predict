@@ -2,7 +2,7 @@
 
 Your next message, one Tab away.
 
-![Pi after a run. Above the editor, the line "↳ commit and push  tab" shows the predicted reply. Tab puts "commit and push" in the editor.](docs/demo.svg)
+![Pi after a run. Above the editor, the line "↳ commit and push  tab" shows the predicted reply. Tab puts "commit and push" in the editor.](https://raw.githubusercontent.com/eddiewang/pi-predict/main/docs/demo.svg)
 
 When the agent finishes, this [Pi](https://pi.dev) extension asks the
 session's own model for the message that you will most likely send next. The
@@ -264,7 +264,7 @@ Then delete `<agentDir>/pi-predict.json` and `<agentDir>/pi-predict/`.
 
 ## Design
 
-[`docs/design.md`](docs/design.md) gives the decisions and the reasons for
+[`docs/design.md`](https://github.com/eddiewang/pi-predict/blob/main/docs/design.md) gives the decisions and the reasons for
 them. The idea comes from the composer predictions of OpenAI's Codex; this is
 an independent implementation, with no Codex code.
 
@@ -281,7 +281,7 @@ npm run test:sdk -- <directory with pi-ai.tgz, pi-coding-agent.tgz, pi-tui.tgz>
 `test:sdk` runs the tests against other Pi SDK builds, for example a fork. The
 tests that need a feature of such a build run only there.
 
-[`RELEASING.md`](RELEASING.md) gives the release steps.
+[`RELEASING.md`](https://github.com/eddiewang/pi-predict/blob/main/RELEASING.md) gives the release steps.
 
 ## License
 

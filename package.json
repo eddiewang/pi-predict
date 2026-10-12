@@ -38,7 +38,8 @@
   "pi": {
     "extensions": [
       "./src/index.ts"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/eddiewang/pi-predict/main/docs/demo.svg"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
