@@ -19,7 +19,8 @@ One tag, `vX.Y.Z`, makes a release on two channels:
 - In `README.md`, use absolute URLs for images and for links to files that are
   not in the package. The [Pi package gallery](https://pi.dev/packages) shows
   the README from the npm package, which holds only `package.json`,
-  `README.md`, `CHANGELOG.md`, `LICENSE`, and `src/`.
+  `README.md`, `CHANGELOG.md`, `LICENSE`, and `src/`. `npm run smoke` fails
+  when a relative path in the README names a file that is not in the package.
 
 ## Release a version
 

@@ -1,7 +1,8 @@
 /**
  * Smoke test of the published package: pack it, load the tarball's contents into the `pi` binary of the installed
  * SDK in RPC mode, and check that this package registers `/predict`, that no extension reports an error, and that Pi
- * stops after SIGTERM (which runs the extensions' shutdown handlers).
+ * stops after SIGTERM (which runs the extensions' shutdown handlers). It also checks that each relative path in the
+ * packed README names a file in the package, because the Pi package gallery resolves these paths against the package.
  *
  *   npm run smoke
  *
@@ -10,9 +11,9 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const TIMEOUT_MS = 60_000;
@@ -37,6 +38,39 @@ function pack(root: string, destination: string): string {
 	const [info] = JSON.parse(result.stdout) as Array<{ filename: string }>;
 	if (!info) throw new Error("npm pack printed no file name");
 	return join(destination, info.filename);
+}
+
+/**
+ * Returns each relative path in the packed README that names no file or directory in the package. Links in code are
+ * not links, so fenced blocks and inline code are removed first. URLs with a scheme (`https:`, `mailto:`),
+ * protocol-relative URLs, and anchors on the page are not relative paths.
+ */
+function missingReadmePaths(packageDir: string): string[] {
+	const text = readFileSync(join(packageDir, "README.md"), "utf8")
+		.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[^\n]*$/gm, "")
+		.replace(/`[^`\n]*`/g, "");
+	const targets = [
+		...[...text.matchAll(/\]\(\s*<?([^\s)>]+)/g)].map((match) => match[1]), // [text](path) and ![alt](path)
+		...[...text.matchAll(/^ {0,3}\[[^\]\n]+\]:\s*<?([^\s>]+)/gm)].map((match) => match[1]), // [label]: path
+		...[...text.matchAll(/\b(?:src|href|poster)\s*=\s*["']([^"']+)["']/gi)].map((match) => match[1]),
+		...[...text.matchAll(/\bsrcset\s*=\s*["']([^"']+)["']/gi)].flatMap((match) =>
+			(match[1] ?? "").split(",").map((candidate) => candidate.trim().split(/\s+/)[0]),
+		),
+	];
+	const missing = new Set<string>();
+	for (const target of targets) {
+		if (!target || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(target)) continue;
+		let path: string;
+		try {
+			path = resolve(packageDir, decodeURIComponent(target.replace(/[?#].*$/, "").replace(/^\/+/, "")));
+		} catch {
+			missing.add(target); // malformed percent-encoding
+			continue;
+		}
+		const rel = relative(packageDir, path);
+		if (rel.startsWith("..") || isAbsolute(rel) || !existsSync(path)) missing.add(target);
+	}
+	return [...missing];
 }
 
 function inside(path: string, directory: string): boolean {
@@ -144,8 +178,12 @@ async function main(): Promise<number> {
 		const { version } = JSON.parse(readFileSync(sdkManifest, "utf8")) as { version: string };
 		console.log(`smoke: ${tarball.slice(work.length + 1)} in pi ${version}`);
 
+		const problems = missingReadmePaths(packageDir).map(
+			(target) =>
+				`README.md refers to ${target}, which is not in the package. The Pi package gallery resolves relative ` +
+				"paths against the package, so use an absolute URL",
+		);
 		const { response, errors, stderr, stopped } = await askCommands(pi, packageDir, work);
-		const problems: string[] = [];
 		if (!response.success) problems.push(`get_commands failed: ${response.error ?? "no error text"}`);
 		if (!stopped) problems.push(`pi did not stop within ${STOP_MS / 1000} s of SIGTERM`);
 		const predict = response.data?.commands?.find((command) => command.name === "predict");
@@ -159,7 +197,10 @@ async function main(): Promise<number> {
 			if (stderr.trim()) console.error(`smoke: pi stderr:\n${stderr.trim()}`);
 			return 1;
 		}
-		console.log("smoke: PASS: the packed package registers /predict, no extension reports an error, and Pi stops");
+		console.log(
+			"smoke: PASS: the packed package registers /predict, no extension reports an error, Pi stops, and each " +
+				"relative path in the README is in the package",
+		);
 		return 0;
 	} finally {
 		rmSync(work, { recursive: true, force: true });
