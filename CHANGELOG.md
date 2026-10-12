@@ -7,6 +7,8 @@ version can contain breaking changes.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-12
+
 ### Added
 
 - A preview image for the [Pi package gallery](https://pi.dev/packages):
