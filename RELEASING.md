@@ -11,11 +11,15 @@ One tag, `vX.Y.Z`, makes a release on two channels:
 
 - Tag only a commit on `main` that you used in your own Pi for at least one
   day. CI tests stock Pi, but each prediction costs money, so real use is the
-  last check.
+  last check. A release that changes no file in `src/` does not need this day.
 - The workflow can only stage a version. GitHub holds no npm token, and npm
   takes no token for this package. Each public version has a maintainer's 2FA
   approval and a provenance attestation.
 - Do not move a tag after npm made its version public.
+- In `README.md`, use absolute URLs for images and for links to files that are
+  not in the package. The [Pi package gallery](https://pi.dev/packages) shows
+  the README from the npm package, which holds only `package.json`,
+  `README.md`, `CHANGELOG.md`, `LICENSE`, and `src/`.
 
 ## Release a version
 
@@ -52,6 +56,11 @@ One tag, `vX.Y.Z`, makes a release on two channels:
 
    The tarball must hold `package.json`, `README.md`, `CHANGELOG.md`,
    `LICENSE`, and `src/`, and nothing more. Compare `src/` with the tag.
+
+   These commands need an npm login. Without one, compare the file list and
+   the shasum in the `publish` log with `npm pack --dry-run` in a clean copy
+   of the tag (`git archive vX.Y.Z | tar -x -C <dir>`). The **Staged
+   Packages** tab on npmjs.com also shows the shasum.
 6. Approve the stage with 2FA: `npm stage approve <stage-id>`, or click
    **Approve** in the **Staged Packages** tab on npmjs.com.
 7. Check the release:
@@ -65,8 +74,13 @@ commands.
 
 ## When a step fails
 
-- `verify` or `publish` fails, or the staged version is wrong: the version is
-  not public yet.
+- `publish` fails with E401 "Unable to authenticate": npm found no trusted
+  publisher that matches the workflow. npm does not log the reason, and it
+  does not check the values when you save them. Compare the trusted publisher
+  on npmjs.com with step 2 of the setup, and correct it. Then run the failed
+  job again: `gh run rerun <run-id> --failed`. The tag can stay.
+- `verify` or `publish` fails for a different reason, or the staged version
+  is wrong: the version is not public yet.
   1. If npm has a stage, reject it: `npm stage reject <stage-id>` (2FA).
   2. If GitHub has a release, delete it:
      `gh release delete vX.Y.Z --repo eddiewang/pi-predict`.
@@ -87,14 +101,18 @@ npm can add a trusted publisher only to a package that exists. The first
 trusted publisher yet, so a maintainer does it once:
 
 1. Create the package from your machine:
-   1. Run `npm login` (2FA).
+   1. Run `npm login` (2FA). Your npm account must have 2FA on: without
+      it, npm refuses trusted publishers and stage approvals.
    2. In a temporary copy of the release commit, set a throwaway version:
       `npm version 0.0.0-bootstrap.0 --no-git-tag-version`.
    3. Run `npm stage publish --tag bootstrap`. A prerelease version needs a
       `--tag`.
-   4. Reject that stage: find its id with
+   4. Reject that stage at once: find its id with
       `npm stage list @eddiewang/pi-predict`, then run
-      `npm stage reject <stage-id>`.
+      `npm stage reject <stage-id>`. Do not approve it in the **Staged
+      Packages** tab, because approval makes the version public. If that
+      happens, remove it in the first 72 hours with
+      `npm unpublish @eddiewang/pi-predict@0.0.0-bootstrap.0`.
 
    If npm refuses to stage a new package, publish the first version with
    `npm publish` and 2FA instead. That version has no provenance.
